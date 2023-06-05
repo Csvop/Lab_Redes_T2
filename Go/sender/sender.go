@@ -20,7 +20,7 @@ func main() {
 	payload := payloadSeparation(bytes, CHUNK_SIZE)
 
 	// Starts the sending mechanism
-	sender(udpSocket, payload)
+	slowStart(udpSocket, payload)
 }
 
 func createUDPSocket() *net.UDPConn {
@@ -110,4 +110,57 @@ func sender(udpSocket *net.UDPConn, payload [][]byte) {
 		// Print the received ACK message
 		fmt.Printf("Received ACK: %s\n", string(ackBuffer[:n]))
 	}
+}
+
+func slowStart(udpSocket *net.UDPConn, payload [][]byte) {
+	size := fmt.Sprint(len(payload))
+	udpSocket.Write([]byte(size))
+
+	packetsToSend := 1
+	packetsSent := 0
+	caCounter := 4
+	for i := 0; i < len(payload); i++ {
+		// Data to send
+		message := payload[i]
+
+		// Send the UDP packet
+		udpSocket.Write(message)
+		packetsSent++
+
+		fmt.Println("\nUDP packet sent successfully!")
+
+		if packetsSent == packetsToSend {
+			for j := 0; j < packetsSent; j++ {
+				ack(udpSocket)
+			}
+
+			if packetsToSend == caCounter {
+				packetsSent = 0
+				packetsToSend++
+				caCounter++
+			} else {
+				packetsSent = 0
+				packetsToSend *= 2
+			}
+		} else if (packetsSent < packetsToSend) && (i == len(payload)-1) {
+			for j := 0; j < packetsSent; j++ {
+				ack(udpSocket)
+			}
+		}
+	}
+}
+
+func ack(udpSocket *net.UDPConn) {
+	// Buffer to store ACK message
+	ackBuffer := make([]byte, 1024)
+
+	// Receive the ACK from the receiver
+	n, _, err := udpSocket.ReadFromUDP(ackBuffer)
+	if err != nil {
+		fmt.Printf("Failed to receive ACK: %s\n", err)
+		return
+	}
+
+	// Print the received ACK message
+	fmt.Printf("Received ACK: %s\n", string(ackBuffer[:n]))
 }
