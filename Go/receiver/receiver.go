@@ -14,7 +14,7 @@ func main() {
 	bytes := reciver(udpSocket)
 
 	// Write the bytes to the file
-	err := ioutil.WriteFile("receive.txt", bytes, 0644)
+	err := ioutil.WriteFile("receive.zip", bytes, 0644)
 	if err != nil {
 		fmt.Printf("Failed to write to file: %s\n", err)
 		return
@@ -51,13 +51,10 @@ func reciver(conn *net.UDPConn) []byte {
 	}
 
 	fmt.Printf("Received %d bytes from %s: %s\n", n, addr.String(), string(buffer[:n]))
-	numberOfPackets, err := strconv.Atoi(string(buffer[:n][0]))
-	if err != nil {
-		fmt.Printf("Failed to convert string to int: %s\n", err)
-		return nil
-	}
 
-	for i := 0; i < numberOfPackets; i++ {
+	intVar, _ := strconv.Atoi(string(buffer[:n]))
+
+	for i := 0; i < intVar; i++ {
 		// Buffer to store received data
 		buffer := make([]byte, 1024)
 
@@ -94,10 +91,14 @@ func reciver(conn *net.UDPConn) []byte {
 
 func cleanArray(stringBuffer []byte) []byte {
 	var byteBuffer []byte
-	for i := 0; i < len(stringBuffer); i++ {
+
+	// Clean the array starting from the end until the first non-zero byte
+	for i := len(stringBuffer) - 1; i >= 0; i-- {
 		if stringBuffer[i] != 0 {
-			byteBuffer = append(byteBuffer, stringBuffer[i])
+			byteBuffer = stringBuffer[:i+1]
+			break
 		}
 	}
+
 	return byteBuffer
 }
