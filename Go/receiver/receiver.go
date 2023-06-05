@@ -2,55 +2,102 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
+	"strconv"
 )
 
 func main() {
-	UDP_IP := "127.0.0.1"
-	UDP_PORT := 5001
+	udpSocket := createUDPSocket()
+	defer udpSocket.Close()
 
-	// Create a UDP socket
-	udpSocket := createUDPSocket(UDP_IP, UDP_PORT)
+	bytes := reciver(udpSocket)
 
-	// Listen for incoming packets
-	go packetListener(udpSocket)
-
-	// Close the socket
-	udpSocket.Close()
+	// Write the bytes to the file
+	err := ioutil.WriteFile("receive.txt", bytes, 0644)
+	if err != nil {
+		fmt.Printf("Failed to write to file: %s\n", err)
+		return
+	}
 }
 
-func createUDPSocket(UDP_IP string, UDP_PORT int) *net.UDPConn {
-	// Resolve the UDP address
-	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", UDP_IP, UDP_PORT))
+func createUDPSocket() *net.UDPConn {
+	// Local address to listen on
+	localAddr, err := net.ResolveUDPAddr("udp", ":1234")
 	if err != nil {
-		fmt.Printf("Error resolving UDP address: %s\n", err)
+		fmt.Printf("Failed to resolve local address: %s\n", err)
 		return nil
 	}
 
-	// Create a UDP socket
-	udpSocket, err := net.ListenUDP("udp", udpAddr)
+	// Create a UDP connection to listen for incoming packets
+	conn, err := net.ListenUDP("udp", localAddr)
 	if err != nil {
-		fmt.Printf("Error listening to UDP: %s\n", err)
+		fmt.Printf("Failed to create UDP connection: %s\n", err)
 		return nil
 	}
 
-	return udpSocket
+	return conn
 }
 
-func packetListener(udpSocket *net.UDPConn) {
-	// Listen for incoming packets
-	for {
-		// Create a buffer for the incoming packet
-		buffer := make([]byte, 16)
+func reciver(conn *net.UDPConn) []byte {
+	stringBuffer := ""
 
-		// Read the incoming packet
-		n, _, err := udpSocket.ReadFromUDP(buffer)
+	// Receive the first packet
+	buffer := make([]byte, 1024)
+	n, addr, err := conn.ReadFromUDP(buffer)
+	if err != nil {
+		fmt.Printf("Failed to receive UDP packet: %s\n", err)
+		return nil
+	}
+
+	fmt.Printf("Received %d bytes from %s: %s\n", n, addr.String(), string(buffer[:n]))
+	numberOfPackets, err := strconv.Atoi(string(buffer[:n][0]))
+	if err != nil {
+		fmt.Printf("Failed to convert string to int: %s\n", err)
+		return nil
+	}
+
+	for i := 0; i < numberOfPackets; i++ {
+		// Buffer to store received data
+		buffer := make([]byte, 1024)
+
+		// Receive the UDP packet
+		n, addr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
-			fmt.Printf("Error reading from UDP: %s\n", err)
-			return
+			fmt.Printf("Failed to receive UDP packet: %s\n", err)
+			return nil
 		}
 
-		// Print the packet
-		fmt.Printf("Packet received: %s\n", buffer[:n])
+		// Print the received packet details
+		fmt.Printf("\nReceived %d bytes from %s: %s\n", n, addr.String(), string(buffer[:n]))
+
+		// Sleep for 2 seconds to simulate a long-running process
+		// time.Sleep(2 * time.Second)
+
+		// Send the ACK back to the sender
+		ackMessage := []byte(string(buffer[:n]))
+		_, err = conn.WriteToUDP(ackMessage, addr)
+		if err != nil {
+			fmt.Printf("Failed to send ACK: %s\n", err)
+			return nil
+		}
+
+		fmt.Println("ACK sent!")
+
+		stringBuffer = stringBuffer + string(buffer[:n])
 	}
+
+	byteBuffer := cleanArray([]byte(stringBuffer))
+
+	return byteBuffer
+}
+
+func cleanArray(stringBuffer []byte) []byte {
+	var byteBuffer []byte
+	for i := 0; i < len(stringBuffer); i++ {
+		if stringBuffer[i] != 0 {
+			byteBuffer = append(byteBuffer, stringBuffer[i])
+		}
+	}
+	return byteBuffer
 }

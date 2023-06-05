@@ -1,3 +1,118 @@
+// package main
+
+// import (
+// 	"fmt"
+// 	"io/ioutil"
+// 	"net"
+// )
+
+// func main() {
+// 	CHUNK_SIZE := 16
+
+// 	// Create a UDP socket
+// 	udpSocket := createUDPSocket()
+// 	defer udpSocket.Close()
+
+// 	// Transfer the file to bytes
+// 	bytes := fileToBytes("send.txt")
+
+// 	// Create the payload from the bytes
+// 	payload := payloadSeparation(bytes, CHUNK_SIZE)
+// 	fmt.Print(payload)
+
+// 	// Send the payload
+// 	go sender(udpSocket)
+// }
+
+// func fileToBytes(filePath string) []byte {
+// 	// Read the contents of the .txt file
+// 	content, err := ioutil.ReadFile(filePath)
+// 	if err != nil {
+// 		fmt.Printf("Error reading file: %s\n", err)
+// 		return nil
+// 	}
+
+// 	// Convert the content to bytes
+// 	bytes := []byte(content)
+
+// 	// Use the bytes as needed
+// 	fmt.Printf("Bytes: %v\n", bytes)
+// 	fmt.Printf("Bytes as string: %d\n", len(bytes))
+
+// 	return bytes
+// }
+
+// func payloadSeparation(payload []byte, partSize int) [][]byte {
+// 	array := make([]byte, 0)
+// 	array = append(array, payload...)
+
+// 	if len(array)%partSize != 0 {
+// 		filler := partSize - (len(array) % partSize)
+
+// 		for i := 0; i < filler; i++ {
+// 			array = append(array, byte(0))
+// 		}
+// 	}
+
+// 	quantPackets := len(array) / partSize
+
+// 	arrayIndex := 0
+// 	matrix := make([][]byte, quantPackets)
+// 	for i := 0; i < quantPackets; i++ {
+// 		matrix[i] = make([]byte, partSize)
+// 		for j := 0; j < partSize; j++ {
+// 			matrix[i][j] = array[arrayIndex]
+// 			arrayIndex++
+// 		}
+// 	}
+
+// 	fmt.Printf("Payload: %v\n", matrix)
+
+// 	return matrix
+// }
+
+// func createUDPSocket() *net.UDPConn {
+// 	// Server address
+// 	serverAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:1234")
+// 	if err != nil {
+// 		fmt.Printf("Failed to resolve server address: %s\n", err)
+// 		return nil
+// 	}
+
+// 	// Create a UDP connection
+// 	conn, err := net.DialUDP("udp", nil, serverAddr)
+// 	if err != nil {
+// 		fmt.Printf("Failed to create UDP connection: %s\n", err)
+// 		return nil
+// 	}
+
+// 	return conn
+// }
+
+// func sender(conn *net.UDPConn) {
+// 	for i := 0; i < 3; i++ {
+// 		// Data to send
+// 		message := []byte("Hello, server!")
+
+// 		// Send the UDP packet
+// 		conn.Write(message)
+// 		fmt.Println("UDP packet sent successfully!")
+
+// 		// Buffer to store ACK message
+// 		ackBuffer := make([]byte, 1024)
+
+// 		// Receive the ACK from the receiver
+// 		n, _, err := conn.ReadFromUDP(ackBuffer)
+// 		if err != nil {
+// 			fmt.Printf("Failed to receive ACK: %s\n", err)
+// 			return
+// 		}
+
+// 		// Print the received ACK message
+// 		fmt.Printf("Received ACK: %s\n\n", string(ackBuffer[:n]))
+// 	}
+// }
+
 package main
 
 import (
@@ -7,19 +122,11 @@ import (
 )
 
 func main() {
-	stop := make(chan bool)
-	packetReceived := make(chan int)
-
-	UDP_IP := "127.0.0.1"
-	UDP_PORT := 5000
-	// UDP_PORT_TO_SEND = 5001
 	CHUNK_SIZE := 16
 
 	// Create a UDP socket
-	udpSocket := createUDPSocket(UDP_IP, UDP_PORT)
-
-	// Listen for incoming acks
-	go ackListener(packetReceived, udpSocket)
+	udpSocket := createUDPSocket()
+	defer udpSocket.Close()
 
 	// Transfer the file to bytes
 	bytes := fileToBytes("send.txt")
@@ -27,12 +134,26 @@ func main() {
 	// Create the payload from the bytes
 	payload := payloadSeparation(bytes, CHUNK_SIZE)
 
-	// Send the payload
-	go sender(udpSocket, payload, CHUNK_SIZE, stop, packetReceived)
+	// Starts the sending mechanism
+	sender(udpSocket, payload)
+}
 
-	// Close the socket
-	udpSocket.Close()
-	<-stop
+func createUDPSocket() *net.UDPConn {
+	// Server address
+	serverAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:1234")
+	if err != nil {
+		fmt.Printf("Failed to resolve server address: %s\n", err)
+		return nil
+	}
+
+	// Create a UDP connection
+	conn, err := net.DialUDP("udp", nil, serverAddr)
+	if err != nil {
+		fmt.Printf("Failed to create UDP connection: %s\n", err)
+		return nil
+	}
+
+	return conn
 }
 
 func fileToBytes(filePath string) []byte {
@@ -46,58 +167,7 @@ func fileToBytes(filePath string) []byte {
 	// Convert the content to bytes
 	bytes := []byte(content)
 
-	// Use the bytes as needed
-	fmt.Printf("Bytes: %v\n", bytes)
-	fmt.Printf("Bytes as string: %d\n", len(bytes))
-
 	return bytes
-}
-
-func createUDPSocket(UDP_IP string, UDP_PORT int) *net.UDPConn {
-	// Resolve the UDP address
-	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", UDP_IP, UDP_PORT))
-	if err != nil {
-		fmt.Printf("Error resolving UDP address: %s\n", err)
-		return nil
-	}
-
-	// Create a UDP socket
-	udpConn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		fmt.Printf("Error creating UDP socket: %s\n", err)
-		return nil
-	}
-
-	return udpConn
-}
-
-func sender(udpSocket *net.UDPConn, payload [][]byte, CHUNK_SIZE int, stop chan bool, packetReceived chan int) {
-	currentPacket := 0
-	for {
-		if currentPacket == len(payload) {
-			break
-		}
-
-		fmt.Printf("\nSending payload...\n")
-		fmt.Printf("Payload: %v\n", payload[currentPacket])
-		send(udpSocket, payload[currentPacket], packetReceived)
-
-		// Wait for ack
-		fmt.Printf("\nWaiting for ack...\n")
-		<-packetReceived
-
-		currentPacket = currentPacket + 1
-	}
-	stop <- true
-}
-
-func send(udpSocket *net.UDPConn, packet []byte, packetReceived chan int) {
-	_, err := udpSocket.Write(packet)
-	if err != nil {
-		fmt.Printf("Error sending payload: %s\n", err)
-		return
-	}
-	fmt.Printf("\nPayload sent successfully\n")
 }
 
 func payloadSeparation(payload []byte, partSize int) [][]byte {
@@ -129,18 +199,30 @@ func payloadSeparation(payload []byte, partSize int) [][]byte {
 	return matrix
 }
 
-func ackListener(packetReceived chan int, udpSocket *net.UDPConn) {
-	for {
-		// // Listen for incoming acks
-		// udpAddr, err := udpSocket.Read(payload)
-		// if err != nil {
-		// 	fmt.Printf("Error resolving UDP address: %s\n", err)
-		// 	return
-		// }
+func sender(udpSocket *net.UDPConn, payload [][]byte) {
+	size := fmt.Sprint(len(payload))
+	udpSocket.Write([]byte(size))
 
-		// udpConn, err := net.ListenUDP("udp", udpAddr)
+	for i := 0; i < len(payload); i++ {
+		// Data to send
+		message := payload[i]
 
-		fmt.Printf("\nPacket Ack: Sucess!")
-		packetReceived <- 1
+		// Send the UDP packet
+		udpSocket.Write(message)
+
+		fmt.Println("\nUDP packet sent successfully!")
+
+		// Buffer to store ACK message
+		ackBuffer := make([]byte, 1024)
+
+		// Receive the ACK from the receiver
+		n, _, err := udpSocket.ReadFromUDP(ackBuffer)
+		if err != nil {
+			fmt.Printf("Failed to receive ACK: %s\n", err)
+			return
+		}
+
+		// Print the received ACK message
+		fmt.Printf("Received ACK: %s\n", string(ackBuffer[:n]))
 	}
 }
