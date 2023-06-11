@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"strconv"
 )
 
 func main() {
@@ -14,7 +15,7 @@ func main() {
 	defer udpSocket.Close()
 
 	// Transfer the file to bytes
-	bytes := fileToBytes("send.zip")
+	bytes := fileToBytes("send.txt")
 
 	// Create the payload from the bytes
 	payload := payloadSeparation(bytes, CHUNK_SIZE)
@@ -79,7 +80,7 @@ func payloadSeparation(payload []byte, partSize int) [][]byte {
 		}
 	}
 
-	fmt.Printf("Payload: %v\n", matrix)
+	// fmt.Printf("Payload: %v\n", matrix)
 
 	return matrix
 }
@@ -123,6 +124,14 @@ func slowStart(udpSocket *net.UDPConn, payload [][]byte) {
 		// Data to send
 		message := payload[i]
 
+		messageWithCounter := make([][]byte, 3)
+		messageWithCounter[0] = []byte(strconv.Itoa(i) + ";")
+		messageWithCounter[1] = []byte(strconv.Itoa(0) + ";")
+		messageWithCounter[2] = message
+
+		message = matrixToArray(messageWithCounter)
+		fmt.Println("message: ", string(message))
+
 		// Send the UDP packet
 		udpSocket.Write(message)
 		packetsSent++
@@ -131,7 +140,8 @@ func slowStart(udpSocket *net.UDPConn, payload [][]byte) {
 
 		if packetsSent == packetsToSend {
 			for j := 0; j < packetsSent; j++ {
-				ack(udpSocket)
+				ackToVerify := (i - packetsToSend) + j
+				ack(udpSocket, ackToVerify, payload)
 			}
 
 			if packetsToSend == caCounter {
@@ -144,13 +154,14 @@ func slowStart(udpSocket *net.UDPConn, payload [][]byte) {
 			}
 		} else if (packetsSent < packetsToSend) && (i == len(payload)-1) {
 			for j := 0; j < packetsSent; j++ {
-				ack(udpSocket)
+				ackToVerify := (i - packetsToSend) + j
+				ack(udpSocket, ackToVerify, payload)
 			}
 		}
 	}
 }
 
-func ack(udpSocket *net.UDPConn) {
+func ack(udpSocket *net.UDPConn, i int, payload [][]byte) {
 	// Buffer to store ACK message
 	ackBuffer := make([]byte, 1024)
 
@@ -163,4 +174,45 @@ func ack(udpSocket *net.UDPConn) {
 
 	// Print the received ACK message
 	fmt.Printf("Received ACK: %s\n", string(ackBuffer[:n]))
+
+	ackNumber, _ := strconv.Atoi(string(ackBuffer[:n]))
+	if (i - ackNumber) == 3 {
+		message := payload[i]
+
+		messageWithCounter := make([][]byte, 3)
+		messageWithCounter[0] = []byte(strconv.Itoa(i) + ";")
+		messageWithCounter[1] = []byte(strconv.Itoa(1) + ";")
+		messageWithCounter[2] = message
+
+		messageFinal := matrixToArray(messageWithCounter)
+
+		// Send the UDP packet
+		udpSocket.Write(messageFinal)
+		fmt.Println("\nUDP packet sent successfully!")
+
+		// Buffer to store ACK message
+		ackBuffer := make([]byte, 1024)
+
+		// Receive the ACK from the receiver
+		n, _, err := udpSocket.ReadFromUDP(ackBuffer)
+		if err != nil {
+			fmt.Printf("Failed to receive ACK: %s\n", err)
+			return
+		}
+
+		// Print the received ACK message
+		fmt.Printf("Received ACK: %s\n", string(ackBuffer[:n]))
+	}
+}
+
+func matrixToArray(matrixBuffer [][]byte) []byte {
+	var byteBuffer []byte
+
+	for i := 0; i < len(matrixBuffer); i++ {
+		for j := 0; j < len(matrixBuffer[i]); j++ {
+			byteBuffer = append(byteBuffer, matrixBuffer[i][j])
+		}
+	}
+
+	return byteBuffer
 }
