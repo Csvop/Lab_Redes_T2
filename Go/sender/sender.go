@@ -44,7 +44,7 @@ func main() {
 
 func createUDPSocket() *net.UDPConn {
 	// Server address
-	serverAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:1234")
+	serverAddr, err := net.ResolveUDPAddr("udp", "192.168.0.11:1234")
 	if err != nil {
 		fmt.Printf("Failed to resolve server address: %s\n", err)
 		return nil
