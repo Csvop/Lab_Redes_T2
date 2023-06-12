@@ -1,14 +1,19 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"strconv"
 )
 
+var packetsToSend int
+
 func main() {
-	CHUNK_SIZE := 16
+	packetsToSend = 1
+	CHUNK_SIZE := 300
 
 	// Create a UDP socket
 	udpSocket := createUDPSocket()
@@ -16,6 +21,19 @@ func main() {
 
 	// Transfer the file to bytes
 	bytes := fileToBytes("send.txt")
+
+	// Calculate MD5 checksum of file
+	checksum := calculateMD5Checksum(bytes)
+
+	checkSumMessage := make([][]byte, 3)
+	checkSumMessage[0] = []byte("!" + ";")
+	checkSumMessage[1] = []byte("!" + ";")
+	checkSumMessage[2] = []byte(checksum)
+
+	lastMessage := matrixToArray(checkSumMessage)
+
+	// Send the checksum to the receiver
+	udpSocket.Write(lastMessage)
 
 	// Create the payload from the bytes
 	payload := payloadSeparation(bytes, CHUNK_SIZE)
@@ -117,7 +135,6 @@ func slowStart(udpSocket *net.UDPConn, payload [][]byte) {
 	size := fmt.Sprint(len(payload))
 	udpSocket.Write([]byte(size))
 
-	packetsToSend := 1
 	packetsSent := 0
 	caCounter := 4
 	for i := 0; i < len(payload); i++ {
@@ -177,10 +194,10 @@ func ack(udpSocket *net.UDPConn, i int, payload [][]byte) {
 
 	ackNumber, _ := strconv.Atoi(string(ackBuffer[:n]))
 	if (i - ackNumber) == 3 {
-		message := payload[i]
+		message := payload[ackNumber]
 
 		messageWithCounter := make([][]byte, 3)
-		messageWithCounter[0] = []byte(strconv.Itoa(i) + ";")
+		messageWithCounter[0] = []byte(strconv.Itoa(ackNumber) + ";")
 		messageWithCounter[1] = []byte(strconv.Itoa(1) + ";")
 		messageWithCounter[2] = message
 
@@ -202,6 +219,8 @@ func ack(udpSocket *net.UDPConn, i int, payload [][]byte) {
 
 		// Print the received ACK message
 		fmt.Printf("Received ACK: %s\n", string(ackBuffer[:n]))
+
+		packetsToSend = packetsToSend / 2
 	}
 }
 
@@ -215,4 +234,15 @@ func matrixToArray(matrixBuffer [][]byte) []byte {
 	}
 
 	return byteBuffer
+}
+
+func calculateMD5Checksum(data []byte) string {
+	hasher := md5.New()
+	hasher.Write(data)
+	checksum := hasher.Sum(nil)
+
+	// Convert the checksum to a hexadecimal string
+	checksumStr := hex.EncodeToString(checksum)
+
+	return checksumStr
 }

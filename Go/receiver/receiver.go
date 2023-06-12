@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -12,10 +14,32 @@ func main() {
 	udpSocket := createUDPSocket()
 	defer udpSocket.Close()
 
+	// Print the MD5 checksum of the file
+	// Buffer to store received data
+	buffer := make([]byte, 1024)
+
+	// Receive the UDP packet
+	n, _, erro := udpSocket.ReadFromUDP(buffer)
+	if erro != nil {
+		fmt.Printf("Failed to receive UDP packet: %s\n", erro)
+	}
+
+	dto := strings.Split(string(buffer[:n]), ";")
+
+	oldFileMD5ScheckSum := getMessageFromDto(dto)
+
 	bytes := reciver(udpSocket)
 
+	newFileMD5ScheckSum := calculateMD5Checksum(bytes)
+
+	if newFileMD5ScheckSum == oldFileMD5ScheckSum {
+		fmt.Println("\n\nFile integrity verified. MD5 checksum matches.")
+	} else {
+		fmt.Println("\n\nFile integrity verification failed. MD5 checksum does not match.")
+	}
+
 	// Write the bytes to the file
-	err := ioutil.WriteFile("send.txt", bytes, 0644)
+	err := ioutil.WriteFile("receive.txt", bytes, 0644)
 	if err != nil {
 		fmt.Printf("Failed to write to file: %s\n", err)
 		return
@@ -56,7 +80,6 @@ func reciver(conn *net.UDPConn) []byte {
 	byteBuffer := make([][]byte, intVar)
 
 	ackAtual := 1
-
 	for i := 0; i < intVar; i++ {
 		// Buffer to store received data
 		buffer := make([]byte, 1024)
@@ -78,7 +101,7 @@ func reciver(conn *net.UDPConn) []byte {
 		fmt.Println("Packet index: " + strconv.Itoa(packetIndex))
 
 		// Sleep for 2 seconds to simulate a long-running process
-		// time.Sleep(2 * time.Second)
+		// time.Sleep(15 * time.Second)
 
 		if packetIndex == ackAtual {
 			ackAtual++
@@ -145,4 +168,15 @@ func getMessageFromDto(dto []string) string {
 	}
 
 	return message
+}
+
+func calculateMD5Checksum(data []byte) string {
+	hasher := md5.New()
+	hasher.Write(data)
+	checksum := hasher.Sum(nil)
+
+	// Convert the checksum to a hexadecimal string
+	checksumStr := hex.EncodeToString(checksum)
+
+	return checksumStr
 }
